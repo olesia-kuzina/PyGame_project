@@ -1,123 +1,144 @@
+import sys
+
 import pygame
-import random
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QApplication, QMainWindow
+
+from models import Board, Snake, Apple
+from ui.window import Ui_MainWindow
 
 
-class Board:
-    def __init__(self, height: int, width: int, cell_size: int, grid_color: tuple[int, int, int] = (255, 255, 255)):
-        self.height = height
-        self.width = width
-        self.cell_size = cell_size
-        self.grid_color = grid_color
+class WindowInterface:  # класс для взаимодействия с окном
+    def set_score(self, score: int):  # определяем метод set_score
+        pass
 
-    def render(self, screen):
-        for x in range(self.width):
-            for y in range(self.height):
-                pygame.draw.rect(screen, self.grid_color, (x * self.cell_size, y * self.cell_size, self.cell_size,
-                                                           self.cell_size), 2)
+    def end_game(self, score: int):  # определяем метод end_game
+        pass
 
 
-class Snake:
-    def __init__(self, cell_size: int, color: tuple[int, int, int] = (0, 255, 0), start_pos: tuple[int, int] = (5, 5)):
-        self.cell_size = cell_size
-        self.color = color
-        self.start_pos = start_pos
-        self.body = [start_pos]
-        self.direction = (1, 0)
+class Game:
+    def __init__(self, window: WindowInterface):
+        pygame.init()
+        self.window = window
 
-    def render(self, screen):
-        for i in self.body:
-            pygame.draw.rect(screen, self.color, (i[0] * self.cell_size, i[1] * self.cell_size, self.cell_size,
-                                                  self.cell_size))
+        self.cell_size = 30
+        self.grid_width, self.grid_height = 10, 10
+        self.screen_width = self.grid_width * self.cell_size
+        self.screen_height = self.grid_height * self.cell_size
 
-    def move(self):
-        x_head, y_head = self.body[0]
-        x_direction, y_direction = self.direction
-        new_head = (x_head + x_direction, y_head + y_direction)
-        self.body.insert(0, new_head)
-        self.body.pop()
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+        pygame.display.set_caption("Snake")
+        self.clock = pygame.time.Clock()
+        self.fps = 3
+        self.board = Board(height=self.grid_height, width=self.grid_width, cell_size=self.cell_size)
+        self.snake = Snake(cell_size=self.cell_size)
+        self.apple = Apple(self.grid_width, self.grid_height, self.cell_size, self.snake.body)
 
-    def new_direction(self, new_dir):
-        if (self.direction[0] + new_dir[0] != 0) or (self.direction[1] + new_dir[1] != 0):
-            self.direction = new_dir
+    def loop(self, playing: bool):  # метод loop обрабатывает события pygame
+        if not playing:
+            return False
 
-    def check_collision(self, width: int, height: int):
-        if not (0 <= self.body[0][0] < width and 0 <= self.body[0][-1] < height):
-            return True
-        elif self.body[0] in self.body[1:]:
-            return True
+        for event in pygame.event.get():  # обрабатываем eventы
+            if event.type == pygame.QUIT:  # если окно закрывается
+                self.window.end_game(self.snake.get_score())  # передаём в окно кол-во очков при окончании игры
+                return True
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    self.snake.new_direction((0, -1))
+                elif event.key == pygame.K_DOWN:
+                    self.snake.new_direction((0, 1))
+                elif event.key == pygame.K_LEFT:
+                    self.snake.new_direction((-1, 0))
+                elif event.key == pygame.K_RIGHT:
+                    self.snake.new_direction((1, 0))
+        self.snake.move()  # устанавливаем новое расположение змейки
+        if self.apple.position == self.snake.body[0]:
+            self.snake.grow()
+            self.window.set_score(self.snake.get_score())
+            self.apple.position = self.apple.generate_position(self.snake.body)
+        else:
+            if self.snake.check_collision(width=self.grid_width, height=self.grid_height):
+                self.window.end_game(self.snake.get_score())
+                return True
+
+        self.screen.fill((252, 186, 3))
+        self.board.render(self.screen)
+        self.snake.render(self.screen)
+        self.apple.render(self.screen)
+        pygame.display.flip()
+        self.clock.tick(self.fps)
         return False
 
-    def grow(self):
-        self.body.append(self.body[-1])
 
+class Window(QMainWindow, WindowInterface):
+    def __init__(self):
+        super().__init__()
+        self.title = "Snake"
+        self.left = 10
+        self.top = 10
+        self.width = 300
+        self.height = 200
+        self.init_ui()
+        self.set_callbacks()
 
-class Apple:
-    def __init__(self, grid_width: int, grid_height: int, cell_size: int, body_snake: list):
-        self.grid_width = grid_width
-        self.grid_height = grid_height
-        self.cell_size = cell_size
-        self.position = self.generate_position(body_snake)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.pygame_loop)
+        self.timer.start(0)
 
-    def generate_position(self, body_snake: list):
-        while True:
-            x = random.randint(0, self.grid_width - 1)
-            y = random.randint(0, self.grid_height - 1)
-            if (x, y) not in body_snake:
-                return x, y
+        self.playing = False
 
-    def render(self, screen):
-        pygame.draw.circle(screen, 'red', (self.position[0] * self.cell_size + self.cell_size // 2,
-                                           self.position[1] * self.cell_size + self.cell_size // 2),
-                           self.cell_size // 2)
+    def set_callbacks(self):
+        self._ui.btnLogin.clicked.connect(self.login)
+        self._ui.btnExit.clicked.connect(self.close)
+        self._ui.btnLow.clicked.connect(self.init_pygame)
+        self._ui.btnMedium.clicked.connect(self.init_pygame)
+        self._ui.btnHard.clicked.connect(self.init_pygame)
+        self._ui.btnMenu.clicked.connect(self.to_menu)
+
+    def init_ui(self):
+        self.setWindowTitle(self.title)
+        self.setGeometry(self.left, self.top, self.width, self.height)
+
+        self._ui = Ui_MainWindow()
+        self._ui.setupUi(self)
+        self._ui.stackedWidget.setCurrentIndex(1)
+
+        self.show()
+
+    def init_pygame(self):
+        self.game = Game(self)
+        self.playing = True
+        self._ui.stackedWidget.setCurrentIndex(3)
+
+    def pygame_loop(self):
+        if not self.playing:
+            return
+        if self.game.loop(self.playing):
+            pygame.quit()
+            self.playing = False
+            self._ui.stackedWidget.setCurrentIndex(2)
+
+    def login(self):
+        username = self._ui.editLogin.text()
+        self._ui.labelUsername.setText(username)
+        self._ui.stackedWidget.setCurrentIndex(0)
+
+    def to_menu(self):
+        self._ui.stackedWidget.setCurrentIndex(0)
+
+    def set_score(self, score: int):
+        self._ui.count.display(str(score))
+
+    def end_game(self, score: int):
+        self._ui.label.setText(f"End Game! Your score: {score}")
 
 
 def main():
-    pygame.init()
-    cell_size = 30
-    grid_width, grid_height = 10, 10
-    screen_width = grid_width * cell_size
-    screen_height = grid_height * cell_size
-
-    screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("Snake")
-    clock = pygame.time.Clock()
-    fps = 3
-    board = Board(height=grid_height, width=grid_width, cell_size=cell_size)
-    snake = Snake(cell_size=cell_size)
-    apple = Apple(grid_width, grid_height, cell_size, snake.body)
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:
-                    snake.new_direction((0, -1))
-                elif event.key == pygame.K_DOWN:
-                    snake.new_direction((0, 1))
-                elif event.key == pygame.K_LEFT:
-                    snake.new_direction((-1, 0))
-                elif event.key == pygame.K_RIGHT:
-                    snake.new_direction((1, 0))
-        snake.move()
-        if apple.position == snake.body[0]:
-            print(2)
-            snake.grow()
-            apple.position = apple.generate_position(snake.body)
-        else:
-            if snake.check_collision(width=grid_width, height=grid_height):
-                running = False
-                print('GAME OVER')
-
-        screen.fill((252, 186, 3))
-        board.render(screen)
-        snake.render(screen)
-        apple.render(screen)
-        pygame.display.flip()
-        clock.tick(fps)
-
-    pygame.quit()
+    app = QApplication(sys.argv)
+    window = Window()
+    result = app.exec()
+    sys.exit(result)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
