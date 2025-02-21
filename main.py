@@ -1,10 +1,11 @@
+import random
 import sys
 
 import pygame
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
-from models import Board, Snake, Apple
+from models import Board, Snake, Apple, Star
 from ui.window import Ui_MainWindow
 
 
@@ -33,6 +34,7 @@ class Game:
         self.board = Board(height=self.grid_height, width=self.grid_width, cell_size=self.cell_size)
         self.snake = Snake(cell_size=self.cell_size)
         self.apple = Apple(self.grid_width, self.grid_height, self.cell_size, self.snake.body)
+        self.stars_group = pygame.sprite.Group()
 
     def loop(self, playing: bool):  # метод loop обрабатывает события pygame
         if not playing:
@@ -52,7 +54,12 @@ class Game:
                 elif event.key == pygame.K_RIGHT:
                     self.snake.new_direction((1, 0))
         self.snake.move()  # устанавливаем новое расположение змейки
-        if self.apple.position == self.snake.body[0]:
+        if self.apple.position == self.snake.body[0]:  # если голова "съедает" яблоко
+            stars_count = 10  # кол-во звезд
+            numbers = range(-5, 6)
+            for _ in range(stars_count):
+                Star((self.screen_width // 2, self.screen_height // 2), (0, 0, self.screen_width, self.screen_height),
+                     random.choice(numbers), random.choice(numbers), self.stars_group)
             self.snake.grow()
             self.window.set_score(self.snake.get_score())
             self.apple.position = self.apple.generate_position(self.snake.body)
@@ -65,6 +72,8 @@ class Game:
         self.board.render(self.screen)
         self.snake.render(self.screen)
         self.apple.render(self.screen)
+        self.stars_group.update()
+        self.stars_group.draw(self.screen)
         pygame.display.flip()
         self.clock.tick(self.fps)
         return False

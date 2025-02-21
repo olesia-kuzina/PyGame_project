@@ -1,6 +1,8 @@
 import pygame
 import random
 
+from pygame.sprite import Group
+
 
 class Board:
     def __init__(self, height: int, width: int, cell_size: int, grid_color: tuple[int, int, int] = (255, 255, 255)):
@@ -72,3 +74,23 @@ class Apple:
         pygame.draw.circle(screen, 'red', (self.position[0] * self.cell_size + self.cell_size // 2,
                                            self.position[1] * self.cell_size + self.cell_size // 2),
                            self.cell_size // 2)
+
+
+class Star(pygame.sprite.Sprite):
+
+    def __init__(self, pos: tuple, screen_rect: tuple, dx: int, dy: int, stars_sprite: Group):
+        super().__init__(stars_sprite)
+        self.add(stars_sprite)  # добавляем в группу для спрайтов звезды
+        self.screen_rect = screen_rect  # сохраняем прямоугольник экрана
+        self.image = pygame.image.load('star.png') # загружаем картинку
+        self.rect = self.image.get_rect()  # сохряняем размеры прямоугольника, в который заключена картинка
+        self.velocity = [dx, dy]  # у каждой звезды своя скорость (вектор)
+        self.rect.x, self.rect.y = pos  # задаем координаты звезде
+        self.gravity = 4  # гравитация
+
+    def update(self):
+        self.velocity[1] += self.gravity  # увеличиваем скорость
+        self.rect.x += self.velocity[0]
+        self.rect.y += self.velocity[1]
+        if not self.rect.colliderect(self.screen_rect):  # если частица вне экрана
+            self.kill()  # убиваем её
